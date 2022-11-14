@@ -1,0 +1,11 @@
+{
+  "dependencies": {
+    "dotenv": "^16.0.3",
+    "ethers": "^5.7.2",
+    "web3": "^1.8.1"
+  },
+  "devDependencies": {
+    "@uniswap/sdk-core": "^3.1.0",
+    "@uniswap/v3-sdk": "^3.9.0"
+  }
+}
