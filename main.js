@@ -1,40 +1,84 @@
-//const Web3 = require('web3');
 require('dotenv').config();
-
-// const web3 = new Web3(new Web3.providers.HttpProvider(process.env.PROVIDER));
-
-// const abi = [{"constant":true,"inputs":[],"name":"mintingFinished","outputs":[{"name":"","type":"bool"}],"payable":false,"type":"function"},{"constant":true,"inputs":[],"name":"name","outputs":[{"name":"","type":"string"}],"payable":false,"type":"function"},{"constant":false,"inputs":[{"name":"_spender","type":"address"},{"name":"_value","type":"uint256"}],"name":"approve","outputs":[],"payable":false,"type":"function"},{"constant":true,"inputs":[],"name":"totalSupply","outputs":[{"name":"","type":"uint256"}],"payable":false,"type":"function"},{"constant":false,"inputs":[{"name":"_from","type":"address"},{"name":"_to","type":"address"},{"name":"_value","type":"uint256"}],"name":"transferFrom","outputs":[],"payable":false,"type":"function"},{"constant":true,"inputs":[],"name":"decimals","outputs":[{"name":"","type":"uint256"}],"payable":false,"type":"function"},{"constant":false,"inputs":[],"name":"unpause","outputs":[{"name":"","type":"bool"}],"payable":false,"type":"function"},{"constant":false,"inputs":[{"name":"_to","type":"address"},{"name":"_amount","type":"uint256"}],"name":"mint","outputs":[{"name":"","type":"bool"}],"payable":false,"type":"function"},{"constant":true,"inputs":[],"name":"paused","outputs":[{"name":"","type":"bool"}],"payable":false,"type":"function"},{"constant":true,"inputs":[{"name":"_owner","type":"address"}],"name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"payable":false,"type":"function"},{"constant":false,"inputs":[],"name":"finishMinting","outputs":[{"name":"","type":"bool"}],"payable":false,"type":"function"},{"constant":false,"inputs":[],"name":"pause","outputs":[{"name":"","type":"bool"}],"payable":false,"type":"function"},{"constant":true,"inputs":[],"name":"owner","outputs":[{"name":"","type":"address"}],"payable":false,"type":"function"},{"constant":true,"inputs":[],"name":"symbol","outputs":[{"name":"","type":"string"}],"payable":false,"type":"function"},{"constant":false,"inputs":[{"name":"_to","type":"address"},{"name":"_value","type":"uint256"}],"name":"transfer","outputs":[],"payable":false,"type":"function"},{"constant":false,"inputs":[{"name":"_to","type":"address"},{"name":"_amount","type":"uint256"},{"name":"_releaseTime","type":"uint256"}],"name":"mintTimelocked","outputs":[{"name":"","type":"address"}],"payable":false,"type":"function"},{"constant":true,"inputs":[{"name":"_owner","type":"address"},{"name":"_spender","type":"address"}],"name":"allowance","outputs":[{"name":"remaining","type":"uint256"}],"payable":false,"type":"function"},{"constant":false,"inputs":[{"name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"payable":false,"type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"name":"to","type":"address"},{"indexed":false,"name":"value","type":"uint256"}],"name":"Mint","type":"event"},{"anonymous":false,"inputs":[],"name":"MintFinished","type":"event"},{"anonymous":false,"inputs":[],"name":"Pause","type":"event"},{"anonymous":false,"inputs":[],"name":"Unpause","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"name":"owner","type":"address"},{"indexed":true,"name":"spender","type":"address"},{"indexed":false,"name":"value","type":"uint256"}],"name":"Approval","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"name":"from","type":"address"},{"indexed":true,"name":"to","type":"address"},{"indexed":false,"name":"value","type":"uint256"}],"name":"Transfer","type":"event"}];
-// const address = '0xd26114cd6EE289AccF82350c8d8487fedB8A0C07';
-// const contract = new web3.eth.Contract(abi, address);
-
-
-
-// async function getWeb3Details () {
-//   let tokenName = await contract.methods.name().call();
-//   console.log(tokenName);
-// }
-
-// getWeb3Details();
-
 const { ethers } = require('ethers');
 const provider = new ethers.providers.JsonRpcProvider(process.env.PROVIDER);
 
-const ABI = [
-  // Some details about the token
-  "function name() view returns (string)",
-  "function symbol() view returns (string)",
-  "function decimals() view returns (uint)",
-];
-const address = '0xd26114cd6EE289AccF82350c8d8487fedB8A0C07';
+const QuoterABI = require('@uniswap/v3-periphery/artifacts/contracts/lens/Quoter.sol/Quoter.json').abi;
 
-const omgContract = new ethers.Contract(address, ABI, provider);
+const getFile = filePath => {
+  const fs = require('fs');
+  try {
+    const data = fs.readFileSync(filePath, 'utf8');
+    return data;
+  } catch (error) {
+    console.log(error);
+    return [];
+  }
+};
 
-async function run() {
-  const name = await omgContract.name();
-  const symbol = await omgContract.symbol();
-  const decimals = await omgContract.decimals();
-  console.log({name}, {symbol}, {decimals: decimals.toString()});
-}
+const getPrice = async (factory, amount, tradeDirection) => {
+  const ABI = [
+    'function token0() external view returns (address)',
+    'function token1() external view returns (address)',
+    'function fee() external view returns (uint24)',
+  ];
+  const poolContract = new ethers.Contract(factory, ABI, provider);
+  const token0Address = await poolContract.token0();
+  const token1Address = await poolContract.token1();
+  const fee = await poolContract.fee();
+  
+  const addressArray = [token0Address, token1Address];
+  const tokenInfoArray = [];
+  
+  for (let i = 0; i < addressArray.length; i++) {
+    const address = addressArray[i];
+    const abi = [
+      'function name() external view returns (string)',
+      'function symbol() external view returns (string)',
+      'function decimals() external view returns (uint)',
+    ];
+    const contract = new ethers.Contract(address, abi, provider);
+    const symbol = await contract.symbol();
+    const name = await contract.name();
+    const decimals = await contract.decimals();
+    tokenInfoArray.push({
+      id: `token${i}`,
+      name, symbol, decimals
+    });
+  }
+  console.log(tokenInfoArray);
 
-run();
+};
+
+const getDepth = async (amountIn, limit) => {  
+  /* get JSON surface rates */
+  console.log('reading surface rate information...');
+  const fileInfo = getFile('./uniswap_surface_rates.json');
+  const surfaceRatesParsed = JSON.parse(fileInfo);
+  const surfaceRates = surfaceRatesParsed.slice(0, limit);
+
+  /* loop through each trade and get price information */
+  for (let i = 0; i < surfaceRates.length; i++) {
+    const pairContract1Address = surfaceRates[i].pool_contract_1;
+    const pairContract2Address = surfaceRates[i].pool_contract_2;
+    const pairContract3Address = surfaceRates[i].pool_contract_3;
+    const trade1Direction = surfaceRates[i].pool_direction_trade_1;
+    const trade2Direction = surfaceRates[i].pool_direction_trade_2;
+    const trade3Direction = surfaceRates[i].pool_direction_trade_3;
+
+    /* Trade 1 */
+    console.log('Checking trade 1 acquired coin...');
+    const acquiredCoinDetailT1 = await getPrice(pairContract1Address, amountIn, trade1Direction);
+
+    /* Trade 2 */
+    console.log('Checking trade 2 acquired coin...');
+
+    /* Trade 3 */
+    console.log('Checking trade 3 acquired coin...');
+
+  }
+
+  return 
+};
+
+getDepth(1, 1);
 
