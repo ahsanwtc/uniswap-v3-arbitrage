@@ -46,12 +46,12 @@ def retrieve_uniswap_information():
 
 if __name__ == '__main__':
     pairs = retrieve_uniswap_information()['data']['pools']
-    structured_pairs = functions.structure_trading_pairs(pairs, limit=200)
+    structured_pairs = functions.structure_trading_pairs(pairs, limit=500)
 
     # Get surface rates
     surface_rate_list = []
     for t_pair in structured_pairs:
-        surface_rate = functions.calculate_triangular_arbitrage_surface_rate(t_pair, min_rate=0)
+        surface_rate = functions.calculate_triangular_arbitrage_surface_rate(t_pair, min_rate=1.5)
         if len(surface_rate) > 0:
             surface_rate_list.append(surface_rate)
 
